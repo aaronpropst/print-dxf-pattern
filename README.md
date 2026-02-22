@@ -1,5 +1,7 @@
 # DXF → Tiled PDF Pattern Printer
 
+![DXF to PDF Project](DXF-to-PDF-Project-1771783659762.png)
+
 This repo contains a single script, [dxf_tiled_pdf.py](dxf_tiled_pdf.py), that reads a DXF drawing and produces a multi-page PDF where the drawing is **tiled** across pages for printing and taping together as a full-size pattern.
 
 Each page includes:
