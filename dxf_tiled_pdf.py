@@ -170,8 +170,8 @@ def draw_edge_alignment_dashed_line(
     page_w_pt: float,
     page_h_pt: float,
     inset_pt: float,
-    dash_on_pt: float = 3 * mm,
-    dash_off_pt: float = 3 * mm,
+    dash_on_pt: float = 0.5 * mm,
+    dash_off_pt: float = 9.5 * mm,
 ):
     """Draw a dashed seam line indicating where the *next page's paper edge* should land.
 
@@ -184,6 +184,7 @@ def draw_edge_alignment_dashed_line(
     c.saveState()
     try:
         c.setLineWidth(0.8)
+        c.setLineCap(1)  # round cap => short dashes look like dots
         c.setDash(dash_on_pt, dash_off_pt)
 
         if seam_x_pt is not None:
