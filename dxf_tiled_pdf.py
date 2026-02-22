@@ -193,6 +193,10 @@ def entity_bbox_wu(
             # Conservative bbox: full circle bounds (fast + safe)
             return c.x - r, c.y - r, c.x + r, c.y + r
 
+        if t == "POINT":
+            p = e.dxf.location
+            return p.x, p.y, p.x, p.y
+
         if t == "SPLINE":
             if not scale_wu_to_pt:
                 return None
@@ -385,6 +389,14 @@ def draw_entity(
             r_pt = r * xform.scale_wu_to_pt
             c.arc(x - r_pt, y - r_pt, x + r_pt, y + r_pt,
                   startAng=start, extent=(end - start))
+            return
+
+        if t == "POINT":
+            p = e.dxf.location
+            x, y = xform.w2p(p.x, p.y)
+            # Render as a small filled dot in physical units.
+            r_pt = 0.4 * mm
+            c.circle(x, y, r_pt, stroke=0, fill=1)
             return
 
         if t == "SPLINE":
