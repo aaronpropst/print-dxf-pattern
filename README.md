@@ -4,8 +4,6 @@ This repo contains a single script, [dxf_tiled_pdf.py](dxf_tiled_pdf.py), that r
 
 Each page includes:
 - A header showing the tile index (column/row)
-- Crop marks around the printable rectangle
-- Registration crosses at the printable corners
 - A 100 mm scale bar
 
 ## Install
@@ -137,19 +135,32 @@ ASCII view of one page:
 |                                                    |
 |   margin                                            |
 |   +--------------------------------------------+    |
-|   |  x  registration cross             registration x|   <- printable corners
 |   |                                            |    |
 |   |                                            |    |
 |   |   (DXF geometry for this tile)             |    |
 |   |                                            |    |
 |   |  scale bar (100 mm)                        |    |
-|   |  x  registration cross             registration x| 
 |   +--------------------------------------------+    |
 |                                                    |
 +----------------------------------------------------+
 ```
 
-Crop marks are drawn around the printable rectangle corners, and registration crosses are drawn centered on the printable rectangle corners.
+The printable rectangle is the area inside the margins.
+
+### Edge-alignment marks (tape without measuring)
+
+When your pattern uses overlap (`--overlap-mm > 0`), the script also draws **edge-alignment crosses** that tell you exactly where the *next page’s paper edge* should land.
+
+- For tiles that have a neighbor to the **right**, a pair of crosses is drawn on a vertical “seam” position.
+- For tiles that have a neighbor **above**, a pair of crosses is drawn on a horizontal “seam” position.
+
+Assembly workflow:
+
+1. Put tile (0,0) down.
+2. Take tile (1,0) and place it on top of tile (0,0).
+3. Align tile (1,0)’s **left paper edge** to the two vertical seam crosses on tile (0,0).
+4. Tape.
+5. Repeat across the row, then move upward rows using the horizontal seam crosses.
 
 ## Tiling: how many pages you get
 
@@ -217,7 +228,7 @@ flowchart TD
   D --> E[Convert printable area to world units using dxf-units]
   E --> F[Compute tile grid using overlap]
   F --> G[For each tile: world->page transform]
-  G --> H[Draw crop marks + registration crosses + scale bar]
+  G --> H[Draw edge-alignment marks + scale bar]
   H --> I[Draw all supported entities onto page]
   I --> J[Next page]
 ```

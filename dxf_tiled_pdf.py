@@ -169,6 +169,37 @@ def draw_registration_cross(c: canvas.Canvas, x: float, y: float, size_pt: float
     c.line(x, y - half, x, y + half)
 
 
+def draw_edge_alignment_marks(
+    c: canvas.Canvas,
+    *,
+    seam_x_pt: Optional[float] = None,
+    seam_y_pt: Optional[float] = None,
+    page_w_pt: float,
+    page_h_pt: float,
+    inset_pt: float,
+    size_pt: float = 8 * mm,
+):
+    """Draw alignment marks that indicate where the *next page's paper edge* should land.
+
+    - If seam_x_pt is provided, draw two marks on a vertical seam line.
+    - If seam_y_pt is provided, draw two marks on a horizontal seam line.
+
+    The marks are inset from the paper edges by inset_pt so they remain visible
+    after overlapping pages.
+    """
+    if seam_x_pt is not None:
+        y0 = inset_pt
+        y1 = page_h_pt - inset_pt
+        draw_registration_cross(c, seam_x_pt, y0, size_pt=size_pt)
+        draw_registration_cross(c, seam_x_pt, y1, size_pt=size_pt)
+
+    if seam_y_pt is not None:
+        x0 = inset_pt
+        x1 = page_w_pt - inset_pt
+        draw_registration_cross(c, x0, seam_y_pt, size_pt=size_pt)
+        draw_registration_cross(c, x1, seam_y_pt, size_pt=size_pt)
+
+
 def draw_crop_marks(c: canvas.Canvas, x0: float, y0: float, x1: float, y1: float, len_pt: float = 6*mm):
     """Crop marks at the corners of a rectangle."""
     # bottom-left
@@ -353,6 +384,9 @@ def main():
     printable_w_wu = printable_w_pt / scale
     printable_h_wu = printable_h_pt / scale
 
+    step_w_pt = printable_w_pt - overlap_pt
+    step_h_pt = printable_h_pt - overlap_pt
+
     tiles, nx, ny = compute_tiles(
         bbox, printable_w_wu, printable_h_wu, overlap_wu)
 
@@ -376,14 +410,27 @@ def main():
         x1p = spec.width_pt - spec.margin_pt
         y1p = spec.height_pt - spec.margin_pt
 
-        # crop marks around printable area
-        draw_crop_marks(c, x0p, y0p, x1p, y1p, len_pt=6*mm)
-
-        # registration crosses at printable corners
-        draw_registration_cross(c, x0p, y0p, size_pt=10*mm)
-        draw_registration_cross(c, x1p, y0p, size_pt=10*mm)
-        draw_registration_cross(c, x0p, y1p, size_pt=10*mm)
-        draw_registration_cross(c, x1p, y1p, size_pt=10*mm)
+        # Edge-alignment marks: align the next page's PAPER EDGE to these marks.
+        # Only draw where a neighbor exists.
+        inset_pt = 10 * mm
+        if i < nx - 1:
+            draw_edge_alignment_marks(
+                c,
+                seam_x_pt=step_w_pt,
+                seam_y_pt=None,
+                page_w_pt=spec.width_pt,
+                page_h_pt=spec.height_pt,
+                inset_pt=inset_pt,
+            )
+        if j < ny - 1:
+            draw_edge_alignment_marks(
+                c,
+                seam_x_pt=None,
+                seam_y_pt=step_h_pt,
+                page_w_pt=spec.width_pt,
+                page_h_pt=spec.height_pt,
+                inset_pt=inset_pt,
+            )
 
         # scale bar near bottom margin
         draw_scale_bar(c, x0p + 5*mm, y0p + 5*mm, length_mm=100.0)
