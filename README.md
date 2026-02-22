@@ -80,6 +80,10 @@ dxf_tiled_pdf.py INPUT_DXF OUTPUT_PDF [--page {letter,a4}] [--margin-mm MM] [--o
   - Example: `--layers CUT,MARKS,NOTCHES`
   - Names must match the DXF layer names (including spacing/case as stored in the DXF).
 
+- `--exclude-noncontinuous-linetypes` (default: off)
+  - Skip entities whose effective DXF linetype is not continuous.
+  - Useful for removing dashed construction/reference lines from the printout.
+
 ## How distances and scaling work
 
 The script produces a PDF at **true size** (1:1) assuming you pick the correct `--dxf-units`.
@@ -278,6 +282,16 @@ Bounding boxes are computed for the same set.
 Notes:
 - `ARC` bounding boxes are conservative (treated like a full circle), which can slightly increase the number of tiles.
 - `SPLINE` geometry is flattened into short line segments for both drawing and bounding boxes.
+
+## DXF linetypes (dashed lines)
+
+In DXF, “dashed lines” are not a different entity type; they are a **linetype** property.
+
+- Entities may set `linetype` directly (e.g. `DASHED`).
+- Or they may set `linetype = BYLAYER`, meaning “use my layer’s linetype”.
+- The linetype name refers to a definition in the DXF linetype table (dash/gap pattern lengths in drawing units).
+
+This script renders those patterns in the PDF by default, and it can optionally filter them out using `--exclude-noncontinuous-linetypes`.
 
 ## Limitations / notes
 

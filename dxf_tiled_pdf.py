@@ -65,6 +65,86 @@ def iter_entities(doc: ezdxf.EzdxfDocument, layers: Optional[List[str]] = None):
         yield e
 
 
+def _linetype_name_is_continuous(name: Optional[str]) -> bool:
+    if not name:
+        return True
+    return name.strip().upper() in ("CONTINUOUS", "CONT")
+
+
+def _get_linetype_case_insensitive(doc: ezdxf.EzdxfDocument, name: str):
+    try:
+        return doc.linetypes.get(name)
+    except Exception:
+        pass
+    upper = name.strip().upper()
+    for lt in doc.linetypes:
+        if lt.dxf.name.strip().upper() == upper:
+            return lt
+    raise KeyError(name)
+
+
+def _effective_linetype_name(doc: ezdxf.EzdxfDocument, e) -> str:
+    """Return the effective linetype name for an entity.
+
+    DXF entities can specify:
+    - an explicit linetype name (e.g. "DASHED")
+    - "BYLAYER" (inherit from the entity's layer)
+    - "BYBLOCK" (inherit from a block insert; treat as continuous here)
+    """
+    lt = getattr(e.dxf, "linetype", None) or "BYLAYER"
+    lt_u = lt.strip().upper()
+    if lt_u == "BYLAYER":
+        layer_name = getattr(e.dxf, "layer", "0")
+        try:
+            layer = doc.layers.get(layer_name)
+            return getattr(layer.dxf, "linetype", "CONTINUOUS") or "CONTINUOUS"
+        except Exception:
+            return "CONTINUOUS"
+    if lt_u == "BYBLOCK":
+        return "CONTINUOUS"
+    return lt
+
+
+def _reportlab_dash_array_for_linetype(
+    doc: ezdxf.EzdxfDocument,
+    linetype_name: str,
+    *,
+    scale_wu_to_pt: float,
+) -> Optional[List[float]]:
+    """Convert a DXF linetype pattern into a ReportLab dash array in points.
+
+    Uses ezdxf's `simplified_line_pattern()` which returns positive segment
+    lengths in drawing units, alternating ON/OFF, starting with ON.
+    """
+    if _linetype_name_is_continuous(linetype_name):
+        return None
+    try:
+        lt = _get_linetype_case_insensitive(doc, linetype_name)
+        pattern_wu = lt.simplified_line_pattern()
+    except Exception:
+        return None
+
+    if not pattern_wu:
+        return None
+
+    # DXF linetype patterns are often visually "chunky" when mapped 1:1 into PDF.
+    # Scale the dash/gap lengths down to get a finer-looking pattern.
+    dash_scale = 0.3
+
+    pattern_pt: List[float] = []
+    for seg in pattern_wu:
+        seg_pt = float(seg) * float(scale_wu_to_pt) * dash_scale
+        # Avoid zeros which ReportLab dash can't represent.
+        if seg_pt <= 0:
+            seg_pt = 0.2 * mm
+        pattern_pt.append(seg_pt)
+
+    # ReportLab expects an even-length array; if odd, repeat it.
+    if len(pattern_pt) % 2 == 1:
+        pattern_pt = pattern_pt * 2
+    return pattern_pt
+
+
 def entity_bbox_wu(
     e,
     *,
@@ -223,88 +303,113 @@ def draw_scale_bar(c: canvas.Canvas, x: float, y: float, length_mm: float = 100.
     c.drawString(x, y + 3*mm, f"{int(length_mm)} mm scale bar")
 
 
-def draw_entity(c: canvas.Canvas, e, xform: WorldToPage):
+def draw_entity(
+    c: canvas.Canvas,
+    e,
+    xform: WorldToPage,
+    *,
+    doc: Optional[ezdxf.EzdxfDocument] = None,
+    exclude_noncontinuous_linetypes: bool = False,
+):
     t = e.dxftype()
-    if t == "LINE":
-        p1 = e.dxf.start
-        p2 = e.dxf.end
-        x1, y1 = xform.w2p(p1.x, p1.y)
-        x2, y2 = xform.w2p(p2.x, p2.y)
-        c.line(x1, y1, x2, y2)
-        return
 
-    if t == "LWPOLYLINE":
-        pts = [(p[0], p[1]) for p in e.get_points("xy")]
-        if not pts:
+    lt_name: Optional[str] = None
+    dash: Optional[List[float]] = None
+    if doc is not None:
+        lt_name = _effective_linetype_name(doc, e)
+        if exclude_noncontinuous_linetypes and not _linetype_name_is_continuous(lt_name):
             return
-        p0 = pts[0]
-        x0, y0 = xform.w2p(p0[0], p0[1])
-        path = c.beginPath()
-        path.moveTo(x0, y0)
-        for (xw, yw) in pts[1:]:
-            xp, yp = xform.w2p(xw, yw)
-            path.lineTo(xp, yp)
-        if e.closed:
-            path.close()
-        c.drawPath(path)
-        return
+        dash = _reportlab_dash_array_for_linetype(
+            doc, lt_name, scale_wu_to_pt=xform.scale_wu_to_pt
+        )
 
-    if t == "POLYLINE":
-        pts = [(v.dxf.location.x, v.dxf.location.y) for v in e.vertices()]
-        if not pts:
-            return
-        x0, y0 = xform.w2p(pts[0][0], pts[0][1])
-        path = c.beginPath()
-        path.moveTo(x0, y0)
-        for (xw, yw) in pts[1:]:
-            xp, yp = xform.w2p(xw, yw)
-            path.lineTo(xp, yp)
-        if e.is_closed:
-            path.close()
-        c.drawPath(path)
-        return
+    c.saveState()
+    try:
+        if dash:
+            c.setDash(dash, 0)
 
-    if t == "CIRCLE":
-        cc = e.dxf.center
-        r = float(e.dxf.radius)
-        x, y = xform.w2p(cc.x, cc.y)
-        r_pt = r * xform.scale_wu_to_pt
-        c.circle(x, y, r_pt)
-        return
+        if t == "LINE":
+            p1 = e.dxf.start
+            p2 = e.dxf.end
+            x1, y1 = xform.w2p(p1.x, p1.y)
+            x2, y2 = xform.w2p(p2.x, p2.y)
+            c.line(x1, y1, x2, y2)
+            return
 
-    if t == "ARC":
-        cc = e.dxf.center
-        r = float(e.dxf.radius)
-        start = float(e.dxf.start_angle)
-        end = float(e.dxf.end_angle)
-        # reportlab uses degrees CCW from +x, same convention
-        x, y = xform.w2p(cc.x, cc.y)
-        r_pt = r * xform.scale_wu_to_pt
-        c.arc(x - r_pt, y - r_pt, x + r_pt, y + r_pt,
-              startAng=start, extent=(end - start))
-        return
+        if t == "LWPOLYLINE":
+            pts = [(p[0], p[1]) for p in e.get_points("xy")]
+            if not pts:
+                return
+            p0 = pts[0]
+            x0, y0 = xform.w2p(p0[0], p0[1])
+            path = c.beginPath()
+            path.moveTo(x0, y0)
+            for (xw, yw) in pts[1:]:
+                xp, yp = xform.w2p(xw, yw)
+                path.lineTo(xp, yp)
+            if e.closed:
+                path.close()
+            c.drawPath(path)
+            return
 
-    if t == "SPLINE":
-        # Approximate curve with line segments.
-        # Choose a flattening distance that corresponds to ~0.5mm on paper.
-        flatten_dist_wu = (0.5 * mm) / float(xform.scale_wu_to_pt)
-        if flatten_dist_wu <= 0:
+        if t == "POLYLINE":
+            pts = [(v.dxf.location.x, v.dxf.location.y) for v in e.vertices()]
+            if not pts:
+                return
+            x0, y0 = xform.w2p(pts[0][0], pts[0][1])
+            path = c.beginPath()
+            path.moveTo(x0, y0)
+            for (xw, yw) in pts[1:]:
+                xp, yp = xform.w2p(xw, yw)
+                path.lineTo(xp, yp)
+            if e.is_closed:
+                path.close()
+            c.drawPath(path)
             return
-        try:
-            p = make_path(e)
-            pts = list(p.flattening(flatten_dist_wu))
-        except Exception:
+
+        if t == "CIRCLE":
+            cc = e.dxf.center
+            r = float(e.dxf.radius)
+            x, y = xform.w2p(cc.x, cc.y)
+            r_pt = r * xform.scale_wu_to_pt
+            c.circle(x, y, r_pt)
             return
-        if len(pts) < 2:
+
+        if t == "ARC":
+            cc = e.dxf.center
+            r = float(e.dxf.radius)
+            start = float(e.dxf.start_angle)
+            end = float(e.dxf.end_angle)
+            # reportlab uses degrees CCW from +x, same convention
+            x, y = xform.w2p(cc.x, cc.y)
+            r_pt = r * xform.scale_wu_to_pt
+            c.arc(x - r_pt, y - r_pt, x + r_pt, y + r_pt,
+                  startAng=start, extent=(end - start))
             return
-        x0, y0 = xform.w2p(pts[0].x, pts[0].y)
-        path = c.beginPath()
-        path.moveTo(x0, y0)
-        for v in pts[1:]:
-            xp, yp = xform.w2p(v.x, v.y)
-            path.lineTo(xp, yp)
-        c.drawPath(path)
-        return
+
+        if t == "SPLINE":
+            # Approximate curve with line segments.
+            # Choose a flattening distance that corresponds to ~0.5mm on paper.
+            flatten_dist_wu = (0.5 * mm) / float(xform.scale_wu_to_pt)
+            if flatten_dist_wu <= 0:
+                return
+            try:
+                p = make_path(e)
+                pts = list(p.flattening(flatten_dist_wu))
+            except Exception:
+                return
+            if len(pts) < 2:
+                return
+            x0, y0 = xform.w2p(pts[0].x, pts[0].y)
+            path = c.beginPath()
+            path.moveTo(x0, y0)
+            for v in pts[1:]:
+                xp, yp = xform.w2p(v.x, v.y)
+                path.lineTo(xp, yp)
+            c.drawPath(path)
+            return
+    finally:
+        c.restoreState()
 
 # ----------------------------
 # Tiling logic
@@ -348,6 +453,11 @@ def main():
     ap.add_argument("--dxf-units", default="mm", choices=["mm", "inch"])
     ap.add_argument("--layers", default=None,
                     help="Comma-separated layer names to include (optional).")
+    ap.add_argument(
+        "--exclude-noncontinuous-linetypes",
+        action="store_true",
+        help="Skip entities whose effective linetype is not CONTINUOUS (e.g. DASHED).",
+    )
     args = ap.parse_args()
 
     doc = ezdxf.readfile(args.input_dxf)
@@ -443,7 +553,13 @@ def main():
         # Draw entities (no clipping here; simple + robust. optional clip could be added.)
         c.setLineWidth(1)
         for e in ents_list:
-            draw_entity(c, e, xform)
+            draw_entity(
+                c,
+                e,
+                xform,
+                doc=doc,
+                exclude_noncontinuous_linetypes=args.exclude_noncontinuous_linetypes,
+            )
 
         # Show where this tile sits in overall pattern (optional text)
         c.setFont("Helvetica", 7)
