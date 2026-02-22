@@ -22,33 +22,42 @@ pip3 install ezdxf reportlab
 
 ## Quick start
 
-DXF units are commonly **mm** (e.g. exported from CAD). Generate letter-sized tiles with 10 mm margins and 10 mm overlap:
+By default the script uses:
+
+- `--page letter`
+- `--margin-mm 10`
+- `--overlap-mm 10`
+- `--dxf-units inch`
+
+The output PDF path is optional; if you omit it, the script writes to `<input>.pdf`.
+
+Generate letter-sized tiles with the defaults (writes `input.pdf`):
 
 ```bash
-python3 dxf_tiled_pdf.py input.dxf output.pdf \
-  --page letter \
-  --margin-mm 10 \
-  --overlap-mm 10 \
-  --dxf-units mm
+python3 dxf_tiled_pdf.py input.dxf
 ```
 
-If your DXF coordinates are in **inches**:
+If your DXF coordinates are in **millimeters**:
 
 ```bash
-python3 dxf_tiled_pdf.py input.dxf output.pdf \
-  --page letter \
-  --margin-mm 10 \
-  --overlap-mm 10 \
-  --dxf-units inch
+python3 dxf_tiled_pdf.py input.dxf --dxf-units mm
 ```
+
+To choose an explicit output filename:
+
+```bash
+python3 dxf_tiled_pdf.py input.dxf output.pdf
+```
+
+The script will **error** if the output PDF already exists (it will not overwrite).
 
 ## Command-line arguments
 
 The script interface is:
 
 ```text
-dxf_tiled_pdf.py INPUT_DXF OUTPUT_PDF [--page {letter,a4}] [--margin-mm MM] [--overlap-mm MM]
-                                 [--dxf-units {mm,inch}] [--layers L1,L2,...]
+dxf_tiled_pdf.py INPUT_DXF [OUTPUT_PDF] [--page {letter,a4}] [--margin-mm MM] [--overlap-mm MM]
+                             [--dxf-units {mm,inch}] [--layers L1,L2,...]
 ```
 
 ### Positional arguments
@@ -56,7 +65,9 @@ dxf_tiled_pdf.py INPUT_DXF OUTPUT_PDF [--page {letter,a4}] [--margin-mm MM] [--o
 - `INPUT_DXF`
   - Path to the DXF file to read.
 - `OUTPUT_PDF`
-  - Path to write the resulting tiled PDF.
+  - Optional path to write the resulting tiled PDF.
+  - If omitted, the script uses the input filename with a `.pdf` extension.
+  - If the output path already exists, the script exits with an error.
 
 ### Options
 
@@ -73,7 +84,7 @@ dxf_tiled_pdf.py INPUT_DXF OUTPUT_PDF [--page {letter,a4}] [--margin-mm MM] [--o
   - **Physical** overlap between neighboring tiles, in millimeters.
   - Overlap gives you shared geometry between pages, so alignment/taping is easier.
 
-- `--dxf-units {mm,inch}` (default: `mm`)
+- `--dxf-units {mm,inch}` (default: `inch`)
   - Declares what one DXF “world unit” means.
   - This controls the 1:1 mapping from DXF coordinates to printed size.
 
@@ -300,7 +311,7 @@ This script renders those patterns in the PDF by default, and it can optionally 
 ## Limitations / notes
 
 - No clipping is applied per-tile: the script draws all entities on every page, relying on the world→page transform to place most geometry off-page. This is simple and robust, but for very large DXFs it can be slower.
-- DXF text (`TEXT`, `MTEXT`) and splines/ellipses are not rendered yet.
+- DXF text (`TEXT`, `MTEXT`) is not rendered.
 - `--margin-mm` and `--overlap-mm` are physical paper distances in millimeters, independent of DXF units.
 
 ## Troubleshooting

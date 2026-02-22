@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import argparse
+import os
 from dataclasses import dataclass
 from typing import Iterable, Tuple, List, Optional
 
@@ -490,11 +491,16 @@ def main():
     ap = argparse.ArgumentParser(
         description="Convert DXF to tiled PDF with registration marks.")
     ap.add_argument("input_dxf")
-    ap.add_argument("output_pdf")
+    ap.add_argument(
+        "output_pdf",
+        nargs="?",
+        default=None,
+        help="Output PDF path (optional). Defaults to <input_dxf_basename>.pdf",
+    )
     ap.add_argument("--page", default="letter", choices=["letter", "a4"])
     ap.add_argument("--margin-mm", type=float, default=10.0)
     ap.add_argument("--overlap-mm", type=float, default=10.0)
-    ap.add_argument("--dxf-units", default="mm", choices=["mm", "inch"])
+    ap.add_argument("--dxf-units", default="inch", choices=["mm", "inch"])
     ap.add_argument("--layers", default=None,
                     help="Comma-separated layer names to include (optional).")
     ap.add_argument(
@@ -503,6 +509,13 @@ def main():
         help="Skip entities whose effective linetype is not CONTINUOUS (e.g. DASHED).",
     )
     args = ap.parse_args()
+
+    output_pdf = args.output_pdf
+    if not output_pdf:
+        root, _ext = os.path.splitext(args.input_dxf)
+        output_pdf = root + ".pdf"
+    if os.path.exists(output_pdf):
+        raise SystemExit(f"Error: output PDF already exists: {output_pdf}")
 
     doc = ezdxf.readfile(args.input_dxf)
     layer_list = [s.strip()
@@ -540,7 +553,7 @@ def main():
     tiles, nx, ny = compute_tiles(
         bbox, printable_w_wu, printable_h_wu, overlap_wu)
 
-    c = canvas.Canvas(args.output_pdf, pagesize=(
+    c = canvas.Canvas(output_pdf, pagesize=(
         spec.width_pt, spec.height_pt))
     c.setLineWidth(0.6)
 
