@@ -8,6 +8,7 @@ from typing import Iterable, Tuple, List, Optional
 
 import ezdxf
 from ezdxf.math import Vec2
+from ezdxf.path import make_path
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch, mm
 from reportlab.lib.pagesizes import letter, A4
@@ -64,8 +65,19 @@ def iter_entities(doc: ezdxf.EzdxfDocument, layers: Optional[List[str]] = None):
         yield e
 
 
-def entity_bbox_wu(e) -> Optional[Tuple[float, float, float, float]]:
-    """Return (minx, miny, maxx, maxy) in world units for supported entities."""
+def entity_bbox_wu(
+    e,
+    *,
+    scale_wu_to_pt: Optional[float] = None,
+    spline_flatten_mm: float = 0.5,
+) -> Optional[Tuple[float, float, float, float]]:
+    """Return (minx, miny, maxx, maxy) in DXF world units for supported entities.
+
+    Notes:
+    - SPLINE entities are approximated by flattening into short line segments.
+    - For SPLINE we need `scale_wu_to_pt` so the flattening tolerance can be
+      expressed as a physical distance (mm) on paper.
+    """
     t = e.dxftype()
     try:
         if t == "LINE":
@@ -101,18 +113,44 @@ def entity_bbox_wu(e) -> Optional[Tuple[float, float, float, float]]:
             # Conservative bbox: full circle bounds (fast + safe)
             return c.x - r, c.y - r, c.x + r, c.y + r
 
+        if t == "SPLINE":
+            if not scale_wu_to_pt:
+                return None
+            flatten_dist_wu = (spline_flatten_mm * mm) / float(scale_wu_to_pt)
+            if flatten_dist_wu <= 0:
+                return None
+            p = make_path(e)
+            pts = list(p.flattening(flatten_dist_wu))
+            if not pts:
+                return None
+            xs = [v.x for v in pts]
+            ys = [v.y for v in pts]
+            return min(xs), min(ys), max(xs), max(ys)
+
+        print(
+            f"Warning: Unsupported entity type '{t}' for bounding box; skipping.")
+
         # Add more types as needed (ELLIPSE, SPLINE, etc.)
         return None
     except Exception:
         return None
 
 
-def drawing_bbox_wu(ents: Iterable) -> Tuple[float, float, float, float]:
-    bbs = [entity_bbox_wu(e) for e in ents]
+def drawing_bbox_wu(
+    ents: Iterable,
+    *,
+    scale_wu_to_pt: Optional[float] = None,
+    spline_flatten_mm: float = 0.5,
+) -> Tuple[float, float, float, float]:
+    bbs = [
+        entity_bbox_wu(e, scale_wu_to_pt=scale_wu_to_pt,
+                       spline_flatten_mm=spline_flatten_mm)
+        for e in ents
+    ]
     bbs = [bb for bb in bbs if bb is not None]
     if not bbs:
         raise ValueError(
-            "No supported geometry found in DXF (LINE/LWPOLYLINE/etc.).")
+            "No supported geometry found in DXF (LINE/LWPOLYLINE/SPLINE/etc.).")
     minx = min(bb[0] for bb in bbs)
     miny = min(bb[1] for bb in bbs)
     maxx = max(bb[2] for bb in bbs)
@@ -219,6 +257,28 @@ def draw_entity(c: canvas.Canvas, e, xform: WorldToPage):
               startAng=start, extent=(end - start))
         return
 
+    if t == "SPLINE":
+        # Approximate curve with line segments.
+        # Choose a flattening distance that corresponds to ~0.5mm on paper.
+        flatten_dist_wu = (0.5 * mm) / float(xform.scale_wu_to_pt)
+        if flatten_dist_wu <= 0:
+            return
+        try:
+            p = make_path(e)
+            pts = list(p.flattening(flatten_dist_wu))
+        except Exception:
+            return
+        if len(pts) < 2:
+            return
+        x0, y0 = xform.w2p(pts[0].x, pts[0].y)
+        path = c.beginPath()
+        path.moveTo(x0, y0)
+        for v in pts[1:]:
+            xp, yp = xform.w2p(v.x, v.y)
+            path.lineTo(xp, yp)
+        c.drawPath(path)
+        return
+
 # ----------------------------
 # Tiling logic
 # ----------------------------
@@ -268,7 +328,6 @@ def main():
                   for s in args.layers.split(",")] if args.layers else None
 
     ents_list = list(iter_entities(doc, layers=layer_list))
-    bbox = drawing_bbox_wu(ents_list)
 
     # Map DXF units -> PDF points (1 pt = 1/72 inch)
     if args.dxf_units == "mm":
@@ -282,6 +341,8 @@ def main():
         overlap_wu = args.overlap_mm / 25.4
         margin_pt = args.margin_mm * mm
         overlap_pt = args.overlap_mm * mm
+
+    bbox = drawing_bbox_wu(ents_list, scale_wu_to_pt=scale)
 
     page_w_pt, page_h_pt = page_size(args.page)
     spec = PageSpec(width_pt=page_w_pt, height_pt=page_h_pt,

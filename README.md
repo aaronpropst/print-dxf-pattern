@@ -258,10 +258,15 @@ The renderer currently draws:
 - `LINE`
 - `LWPOLYLINE`
 - `POLYLINE`
+- `SPLINE`
 - `CIRCLE`
 - `ARC`
 
-Bounding boxes are computed for the same set. Note: `ARC` bounding boxes are conservative (treated like a full circle), which can slightly increase the number of tiles.
+Bounding boxes are computed for the same set.
+
+Notes:
+- `ARC` bounding boxes are conservative (treated like a full circle), which can slightly increase the number of tiles.
+- `SPLINE` geometry is flattened into short line segments for both drawing and bounding boxes.
 
 ## Limitations / notes
 
