@@ -505,8 +505,9 @@ def main():
                     help="Comma-separated layer names to include (optional).")
     ap.add_argument(
         "--exclude-noncontinuous-linetypes",
+        "--no-dashed",
         action="store_true",
-        help="Skip entities whose effective linetype is not CONTINUOUS (e.g. DASHED).",
+        help="Skip entities whose effective linetype is not CONTINUOUS (e.g. DASHED). Alias: --no-dashed",
     )
     args = ap.parse_args()
 

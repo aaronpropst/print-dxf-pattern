@@ -93,7 +93,7 @@ dxf_tiled_pdf.py INPUT_DXF [OUTPUT_PDF] [--page {letter,a4}] [--margin-mm MM] [-
   - Example: `--layers CUT,MARKS,NOTCHES`
   - Names must match the DXF layer names (including spacing/case as stored in the DXF).
 
-- `--exclude-noncontinuous-linetypes` (default: off)
+- `--exclude-noncontinuous-linetypes` / `--no-dashed` (default: off)
   - Skip entities whose effective DXF linetype is not continuous.
   - Useful for removing dashed construction/reference lines from the printout.
 
@@ -306,7 +306,7 @@ In DXF, “dashed lines” are not a different entity type; they are a **linetyp
 - Or they may set `linetype = BYLAYER`, meaning “use my layer’s linetype”.
 - The linetype name refers to a definition in the DXF linetype table (dash/gap pattern lengths in drawing units).
 
-This script renders those patterns in the PDF by default, and it can optionally filter them out using `--exclude-noncontinuous-linetypes`.
+This script renders those patterns in the PDF by default, and it can optionally filter them out using `--no-dashed` (alias: `--exclude-noncontinuous-linetypes`).
 
 ## Limitations / notes
 
