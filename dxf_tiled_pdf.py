@@ -562,12 +562,15 @@ def main():
         c.setFont("Helvetica", 9)
         c.drawString(spec.margin_pt, spec.height_pt -
                      spec.margin_pt + 2, f"Tile {i+1}/{nx} x {j+1}/{ny}")
-        c.drawRightString(spec.width_pt - spec.margin_pt, spec.height_pt -
-                          spec.margin_pt + 2, "DXF tiled pattern (1:1)")
 
         # printable rect (optional visual aid)
         x0p = spec.margin_pt
-        y0p = spec.margin_pt
+
+        # scale bar: print only on the first page, near top-left
+        if i == 0 and j == 0:
+            y_top_printable = spec.height_pt - spec.margin_pt
+            draw_scale_bar(c, x0p + 5 * mm, y_top_printable -
+                           8 * mm, length_mm=100.0)
 
         # Edge-alignment marks: align the next page's PAPER EDGE to these marks.
         # Only draw where a neighbor exists.
@@ -590,9 +593,6 @@ def main():
                 page_h_pt=spec.height_pt,
                 inset_pt=inset_pt,
             )
-
-        # scale bar near bottom margin
-        draw_scale_bar(c, x0p + 5*mm, y0p + 5*mm, length_mm=100.0)
 
         # world->page transform for this tile
         xform = WorldToPage(

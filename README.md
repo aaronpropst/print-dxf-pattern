@@ -4,9 +4,9 @@
 
 This repo contains a single script, [dxf_tiled_pdf.py](dxf_tiled_pdf.py), that reads a DXF drawing and produces a multi-page PDF where the drawing is **tiled** across pages for printing and taping together as a full-size pattern.
 
-Each page includes:
-- A header showing the tile index (column/row)
-- A 100 mm scale bar
+Each page includes a header showing the tile index (column/row).
+
+The first page also includes a 100 mm scale bar, so you can verify the printout is at the correct scale (1:1) by measuring that bar with a ruler.
 
 ## Install
 
@@ -245,7 +245,7 @@ flowchart TD
   D --> E[Convert printable area to world units using dxf-units]
   E --> F[Compute tile grid using overlap]
   F --> G[For each tile: world->page transform]
-  G --> H[Draw edge-alignment marks + scale bar]
+  G --> H[Draw edge-alignment marks (scale bar only on first page)]
   H --> I[Draw all supported entities onto page]
   I --> J[Next page]
 ```
@@ -255,7 +255,7 @@ flowchart TD
 ### 1) Letter paper, no overlap (but harder to align)
 
 ```bash
-python3 dxf_tiled_pdf.py PouchV1.dxf pattern_tiles-no-overlap.pdf \
+python3 dxf_tiled_pdf.py pouch-v3.dxf pattern_tiles-no-overlap.pdf \
   --page letter \
   --margin-mm 10 \
   --overlap-mm 0 \
@@ -275,7 +275,7 @@ python3 dxf_tiled_pdf.py input.dxf pattern_a4.pdf \
 
 ### 3) Sanity-check print scaling
 
-- Print one page at **100% / Actual Size** (do not “fit to page”).
+- Print the **first page** at **100% / Actual Size** (do not “fit to page”).
 - Measure the scale bar on the output: it should be exactly 100 mm.
 
 If the scale bar does not measure 100 mm, your PDF viewer/printer settings are scaling the print.
