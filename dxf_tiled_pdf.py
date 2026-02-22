@@ -145,6 +145,40 @@ def _reportlab_dash_array_for_linetype(
     return pattern_pt
 
 
+def _flatten_path_entity_points(
+    e,
+    *,
+    scale_wu_to_pt: Optional[float],
+    flatten_mm: float,
+):
+    """Flatten a path-like DXF entity (e.g. SPLINE/ELLIPSE) into Vec3 points.
+
+    Returns a list of points in DXF world units.
+    """
+    if not scale_wu_to_pt:
+        return []
+    flatten_dist_wu = (float(flatten_mm) * mm) / float(scale_wu_to_pt)
+    if flatten_dist_wu <= 0:
+        return []
+    try:
+        p = make_path(e)
+        return list(p.flattening(flatten_dist_wu))
+    except Exception:
+        return []
+
+
+def _draw_polyline_from_vec3(c: canvas.Canvas, xform: WorldToPage, pts) -> None:
+    if len(pts) < 2:
+        return
+    x0, y0 = xform.w2p(pts[0].x, pts[0].y)
+    path = c.beginPath()
+    path.moveTo(x0, y0)
+    for v in pts[1:]:
+        xp, yp = xform.w2p(v.x, v.y)
+        path.lineTo(xp, yp)
+    c.drawPath(path)
+
+
 def entity_bbox_wu(
     e,
     *,
@@ -154,9 +188,9 @@ def entity_bbox_wu(
     """Return (minx, miny, maxx, maxy) in DXF world units for supported entities.
 
     Notes:
-    - SPLINE entities are approximated by flattening into short line segments.
-    - For SPLINE we need `scale_wu_to_pt` so the flattening tolerance can be
-      expressed as a physical distance (mm) on paper.
+        - SPLINE and ELLIPSE entities are approximated by flattening into short line segments.
+        - For flattened curves we need `scale_wu_to_pt` so the flattening tolerance can be
+            expressed as a physical distance (mm) on paper.
     """
     t = e.dxftype()
     try:
@@ -198,13 +232,19 @@ def entity_bbox_wu(
             return p.x, p.y, p.x, p.y
 
         if t == "SPLINE":
-            if not scale_wu_to_pt:
+            pts = _flatten_path_entity_points(
+                e, scale_wu_to_pt=scale_wu_to_pt, flatten_mm=spline_flatten_mm
+            )
+            if not pts:
                 return None
-            flatten_dist_wu = (spline_flatten_mm * mm) / float(scale_wu_to_pt)
-            if flatten_dist_wu <= 0:
-                return None
-            p = make_path(e)
-            pts = list(p.flattening(flatten_dist_wu))
+            xs = [v.x for v in pts]
+            ys = [v.y for v in pts]
+            return min(xs), min(ys), max(xs), max(ys)
+
+        if t == "ELLIPSE":
+            pts = _flatten_path_entity_points(
+                e, scale_wu_to_pt=scale_wu_to_pt, flatten_mm=spline_flatten_mm
+            )
             if not pts:
                 return None
             xs = [v.x for v in pts]
@@ -400,25 +440,17 @@ def draw_entity(
             return
 
         if t == "SPLINE":
-            # Approximate curve with line segments.
-            # Choose a flattening distance that corresponds to ~0.5mm on paper.
-            flatten_dist_wu = (0.5 * mm) / float(xform.scale_wu_to_pt)
-            if flatten_dist_wu <= 0:
-                return
-            try:
-                p = make_path(e)
-                pts = list(p.flattening(flatten_dist_wu))
-            except Exception:
-                return
-            if len(pts) < 2:
-                return
-            x0, y0 = xform.w2p(pts[0].x, pts[0].y)
-            path = c.beginPath()
-            path.moveTo(x0, y0)
-            for v in pts[1:]:
-                xp, yp = xform.w2p(v.x, v.y)
-                path.lineTo(xp, yp)
-            c.drawPath(path)
+            pts = _flatten_path_entity_points(
+                e, scale_wu_to_pt=xform.scale_wu_to_pt, flatten_mm=0.5
+            )
+            _draw_polyline_from_vec3(c, xform, pts)
+            return
+
+        if t == "ELLIPSE":
+            pts = _flatten_path_entity_points(
+                e, scale_wu_to_pt=xform.scale_wu_to_pt, flatten_mm=0.5
+            )
+            _draw_polyline_from_vec3(c, xform, pts)
             return
     finally:
         c.restoreState()
@@ -512,8 +544,6 @@ def main():
         spec.width_pt, spec.height_pt))
     c.setLineWidth(0.6)
 
-    minx, miny, maxx, maxy = bbox
-
     for (i, j, tile_x0_wu, tile_y0_wu) in tiles:
         # page header
         c.setFont("Helvetica", 9)
@@ -525,8 +555,6 @@ def main():
         # printable rect (optional visual aid)
         x0p = spec.margin_pt
         y0p = spec.margin_pt
-        x1p = spec.width_pt - spec.margin_pt
-        y1p = spec.height_pt - spec.margin_pt
 
         # Edge-alignment marks: align the next page's PAPER EDGE to these marks.
         # Only draw where a neighbor exists.

@@ -274,6 +274,7 @@ The renderer currently draws:
 - `LWPOLYLINE`
 - `POLYLINE`
 - `SPLINE`
+- `ELLIPSE`
 - `POINT`
 - `CIRCLE`
 - `ARC`
