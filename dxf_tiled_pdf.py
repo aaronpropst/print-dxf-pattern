@@ -162,14 +162,7 @@ def drawing_bbox_wu(
 # ----------------------------
 
 
-def draw_registration_cross(c: canvas.Canvas, x: float, y: float, size_pt: float = 10*mm):
-    """Simple crosshair registration mark centered at (x,y)."""
-    half = size_pt / 2.0
-    c.line(x - half, y, x + half, y)
-    c.line(x, y - half, x, y + half)
-
-
-def draw_edge_alignment_marks(
+def draw_edge_alignment_dashed_line(
     c: canvas.Canvas,
     *,
     seam_x_pt: Optional[float] = None,
@@ -177,27 +170,29 @@ def draw_edge_alignment_marks(
     page_w_pt: float,
     page_h_pt: float,
     inset_pt: float,
-    size_pt: float = 8 * mm,
+    dash_on_pt: float = 3 * mm,
+    dash_off_pt: float = 3 * mm,
 ):
-    """Draw alignment marks that indicate where the *next page's paper edge* should land.
+    """Draw a dashed seam line indicating where the *next page's paper edge* should land.
 
-    - If seam_x_pt is provided, draw two marks on a vertical seam line.
-    - If seam_y_pt is provided, draw two marks on a horizontal seam line.
+    - seam_x_pt: draws a vertical dashed line at x=seam_x_pt
+    - seam_y_pt: draws a horizontal dashed line at y=seam_y_pt
 
-    The marks are inset from the paper edges by inset_pt so they remain visible
-    after overlapping pages.
+    Lines are inset from paper edges by inset_pt so they remain visible after
+    overlapping pages.
     """
-    if seam_x_pt is not None:
-        y0 = inset_pt
-        y1 = page_h_pt - inset_pt
-        draw_registration_cross(c, seam_x_pt, y0, size_pt=size_pt)
-        draw_registration_cross(c, seam_x_pt, y1, size_pt=size_pt)
+    c.saveState()
+    try:
+        c.setLineWidth(0.8)
+        c.setDash(dash_on_pt, dash_off_pt)
 
-    if seam_y_pt is not None:
-        x0 = inset_pt
-        x1 = page_w_pt - inset_pt
-        draw_registration_cross(c, x0, seam_y_pt, size_pt=size_pt)
-        draw_registration_cross(c, x1, seam_y_pt, size_pt=size_pt)
+        if seam_x_pt is not None:
+            c.line(seam_x_pt, inset_pt, seam_x_pt, page_h_pt - inset_pt)
+
+        if seam_y_pt is not None:
+            c.line(inset_pt, seam_y_pt, page_w_pt - inset_pt, seam_y_pt)
+    finally:
+        c.restoreState()
 
 
 def draw_crop_marks(c: canvas.Canvas, x0: float, y0: float, x1: float, y1: float, len_pt: float = 6*mm):
@@ -414,7 +409,7 @@ def main():
         # Only draw where a neighbor exists.
         inset_pt = 10 * mm
         if i < nx - 1:
-            draw_edge_alignment_marks(
+            draw_edge_alignment_dashed_line(
                 c,
                 seam_x_pt=step_w_pt,
                 seam_y_pt=None,
@@ -423,7 +418,7 @@ def main():
                 inset_pt=inset_pt,
             )
         if j < ny - 1:
-            draw_edge_alignment_marks(
+            draw_edge_alignment_dashed_line(
                 c,
                 seam_x_pt=None,
                 seam_y_pt=step_h_pt,

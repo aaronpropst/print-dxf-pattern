@@ -149,18 +149,18 @@ The printable rectangle is the area inside the margins.
 
 ### Edge-alignment marks (tape without measuring)
 
-When your pattern uses overlap (`--overlap-mm > 0`), the script also draws **edge-alignment crosses** that tell you exactly where the *next page’s paper edge* should land.
+When your pattern uses overlap (`--overlap-mm > 0`), the script also draws **dashed seam lines** that tell you exactly where the *next page’s paper edge* should land.
 
-- For tiles that have a neighbor to the **right**, a pair of crosses is drawn on a vertical “seam” position.
-- For tiles that have a neighbor **above**, a pair of crosses is drawn on a horizontal “seam” position.
+- For tiles that have a neighbor to the **right**, a vertical dashed line is drawn at the seam position.
+- For tiles that have a neighbor **above**, a horizontal dashed line is drawn at the seam position.
 
 Assembly workflow:
 
 1. Put tile (0,0) down.
 2. Take tile (1,0) and place it on top of tile (0,0).
-3. Align tile (1,0)’s **left paper edge** to the two vertical seam crosses on tile (0,0).
+3. Align tile (1,0)’s **left paper edge** to the vertical dashed seam line on tile (0,0).
 4. Tape.
-5. Repeat across the row, then move upward rows using the horizontal seam crosses.
+5. Repeat across the row, then move upward rows using the horizontal dashed seam line.
 
 ## Tiling: how many pages you get
 
