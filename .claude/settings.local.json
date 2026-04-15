@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"^0$\" /Users/aaron/code/print-dxf-pattern/pouch-v5-38-sa.dxf)",
+      "Bash(awk NR>=286 && NR<=350 *)",
+      "Bash(awk 'NR>=1 && NR<=285' /Users/aaron/code/print-dxf-pattern/pouch-v5-38-sa.dxf)",
+      "Bash(grep -n \"SECTION\\\\|TABLE\\\\|ENDTAB\\\\|ENDSEC\\\\|LTYPE\\\\|LAYER\\\\|^2$\")",
+      "Bash(awk NR>=33 && NR<=130 *)",
+      "Bash(awk NR>=336 && NR<=420 *)",
+      "Bash(docker exec objective_ptolemy *)",
+      "Bash(docker exec *)",
+      "Bash(docker cp *)"
+    ]
+  }
+}

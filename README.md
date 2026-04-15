@@ -2,320 +2,245 @@
 
 ![DXF to PDF Project](DXF-to-PDF-Project-1771783659762.png)
 
-This repo contains a single script, [dxf_tiled_pdf.py](dxf_tiled_pdf.py), that reads a DXF drawing and produces a multi-page PDF where the drawing is **tiled** across pages for printing and taping together as a full-size pattern.
+Reads a DXF drawing and produces a multi-page PDF where the drawing is **tiled** across pages for printing and taping together as a full-size pattern.
 
-Each page includes a header showing the tile index (column/row).
+Each page includes a header showing the tile position (`col: 1/3  row: 1/1`).
 
-The first page also includes a 100 mm scale bar, so you can verify the printout is at the correct scale (1:1) by measuring that bar with a ruler.
+The first page also includes a 100 mm scale bar so you can verify the printout is at correct 1:1 scale.
 
 ## Install
 
-You need Python 3 plus these libraries:
-- `ezdxf` (DXF parsing)
-- `reportlab` (PDF generation)
-
-Install with:
+Download the pre-built binary for your platform from the `mac/` or `linux/` folder and put it somewhere on your PATH. No runtime dependencies required.
 
 ```bash
-pip3 install ezdxf reportlab
+# macOS (Apple Silicon)
+cp mac/dxf2pdf /usr/local/bin/dxf2pdf
+
+# Linux (ARM64)
+cp linux/dxf2pdf /usr/local/bin/dxf2pdf
 ```
 
 ## Quick start
 
-By default the script uses:
-
-- `--page letter`
-- `--margin-mm 10`
-- `--overlap-mm 10`
-- `--dxf-units inch`
-
-The output PDF path is optional; if you omit it, the script writes to `<input>.pdf`.
-
-Generate letter-sized tiles with the defaults (writes `input.pdf`):
+Defaults: letter paper, 10 mm margin, 10 mm overlap, DXF units = inch.
+Output path is optional; omitting it writes `<input>.pdf`.
 
 ```bash
-python3 dxf_tiled_pdf.py input.dxf
+# Generate letter-sized tiles (writes input.pdf)
+dxf2pdf input.dxf
+
+# Explicit output path
+dxf2pdf input.dxf output.pdf
+
+# DXF coordinates in millimeters
+dxf2pdf input.dxf --dxf-units mm
 ```
 
-If your DXF coordinates are in **millimeters**:
+The tool will **error** if the output PDF already exists (it will not overwrite).
 
-```bash
-python3 dxf_tiled_pdf.py input.dxf --dxf-units mm
-```
-
-To choose an explicit output filename:
-
-```bash
-python3 dxf_tiled_pdf.py input.dxf output.pdf
-```
-
-The script will **error** if the output PDF already exists (it will not overwrite).
-
-## Command-line arguments
-
-The script interface is:
+## Command-line reference
 
 ```text
-dxf_tiled_pdf.py INPUT_DXF [OUTPUT_PDF] [--page {letter,a4}] [--margin-mm MM] [--overlap-mm MM]
-                             [--dxf-units {mm,inch}] [--layers L1,L2,...]
+dxf2pdf [options] INPUT_DXF [OUTPUT_PDF]
 ```
 
 ### Positional arguments
 
-- `INPUT_DXF`
-  - Path to the DXF file to read.
-- `OUTPUT_PDF`
-  - Optional path to write the resulting tiled PDF.
-  - If omitted, the script uses the input filename with a `.pdf` extension.
-  - If the output path already exists, the script exits with an error.
+| Argument | Description |
+|---|---|
+| `INPUT_DXF` | Path to the DXF file to read |
+| `OUTPUT_PDF` | *(optional)* Output path. Defaults to `<input>.pdf` |
 
 ### Options
 
-- `--page {letter,a4}` (default: `letter`)
-  - Paper size.
-  - `letter` is US Letter (8.5" × 11").
-  - `a4` is ISO A4 (210 mm × 297 mm).
-
-- `--margin-mm <float>` (default: `10.0`)
-  - **Physical** page margin in millimeters.
-  - This margin defines the **printable rectangle** the script uses when laying out tiles.
-
-- `--overlap-mm <float>` (default: `10.0`)
-  - **Physical** overlap between neighboring tiles, in millimeters.
-  - Overlap gives you shared geometry between pages, so alignment/taping is easier.
-
-- `--dxf-units {mm,inch}` (default: `inch`)
-  - Declares what one DXF “world unit” means.
-  - This controls the 1:1 mapping from DXF coordinates to printed size.
-
-- `--layers L1,L2,...` (default: all layers)
-  - Optional comma-separated list of layer names to include.
-  - Example: `--layers CUT,MARKS,NOTCHES`
-  - Names must match the DXF layer names (including spacing/case as stored in the DXF).
-
-- `--exclude-noncontinuous-linetypes` / `--no-dashed` (default: off)
-  - Skip entities whose effective DXF linetype is not continuous.
-  - Useful for removing dashed construction/reference lines from the printout.
+| Flag | Default | Description |
+|---|---|---|
+| `--page {letter,a4}` | `letter` | Paper size |
+| `--margin-mm <float>` | `10.0` | Page margin in millimeters |
+| `--overlap-mm <float>` | `10.0` | Tile overlap in millimeters |
+| `--dxf-units {mm,inch}` | `inch` | What one DXF world unit represents |
+| `--layers L1,L2,...` | *(all)* | Comma-separated layer names to include |
+| `--no-dashed` | off | Skip entities with non-continuous linetypes |
 
 ## How distances and scaling work
 
-The script produces a PDF at **true size** (1:1) assuming you pick the correct `--dxf-units`.
+The tool produces a PDF at **true 1:1 size** assuming you pick the correct `--dxf-units`.
 
-### Unit systems involved
+### Unit systems
 
-- **PDF points (pt)**: ReportLab’s internal unit.
-  - $1\ \text{in} = 72\ \text{pt}$
-- **Millimeters**: used for margins/overlap UI and for the scale bar.
-  - $1\ \text{mm} \approx 2.83464567\ \text{pt}$
+- **Millimeters (mm)**: fpdf's working unit; used for all page layout.
 - **DXF world units (wu)**: the coordinate system stored in the DXF.
-  - If `--dxf-units mm`, then $1\ \text{wu} = 1\ \text{mm}$.
-  - If `--dxf-units inch`, then $1\ \text{wu} = 1\ \text{inch}$.
+  - `--dxf-units mm` → 1 wu = 1 mm
+  - `--dxf-units inch` → 1 wu = 25.4 mm
 
-### The key mapping
+### The coordinate transform
 
-For each tile/page, DXF coordinates $(x_{wu}, y_{wu})$ are mapped onto the page as:
+For each tile, DXF coordinates $(x, y)$ are mapped to page coordinates as:
 
 $$
 \begin{aligned}
- x_{pt} &= x_{page0,pt} + (x_{wu} - x_{world0,wu}) \cdot s\\
- y_{pt} &= y_{page0,pt} + (y_{wu} - y_{world0,wu}) \cdot s
+ x_{mm} &= \text{margin} + (x_{wu} - x_{tile0}) \cdot s \\
+ y_{mm} &= (\text{pageH} - \text{margin}) - (y_{wu} - y_{tile0}) \cdot s
 \end{aligned}
 $$
 
 Where:
-- $s$ is `scale_wu_to_pt`
-  - If `--dxf-units mm`, then $s = 1\ \text{mm in pt}$
-  - If `--dxf-units inch`, then $s = 1\ \text{inch in pt}$
-- $(x_{world0,wu}, y_{world0,wu})$ is the tile’s world-space origin (bottom-left of that tile)
-- $(x_{page0,pt}, y_{page0,pt})$ is the printable-rectangle origin on the page (equal to the margin)
+- $s$ is the scale factor (mm per world unit)
+- $(x_{tile0}, y_{tile0})$ is the tile's world-space origin (bottom-left)
+- The $y$ formula includes a **Y-flip** because DXF is Y-up and PDF is Y-down
 
-### Important nuance: `--overlap-mm` is always specified in millimeters
+### `--overlap-mm` and `--margin-mm` are always millimeters
 
-Even when `--dxf-units inch`, the script still treats `--overlap-mm` as millimeters of **physical** overlap.
-Internally it converts that overlap into world units (inches) by dividing by 25.4.
+Even when `--dxf-units inch`, these flags describe physical paper layout, not drawing units. The tool converts them to world units internally by dividing by the scale factor.
 
-This is intentional: margins/overlap describe how you want the *paper layout* to behave.
-
-Similarly, `--margin-mm` is always interpreted as a physical millimeter margin on paper (it does not change if your DXF units are inches).
-
-## Printable area, margins, and registration marks
-
-The script defines a “printable rectangle” by subtracting margins from the page size:
-
-- Printable width (pt): `page_width_pt - 2*margin_pt`
-- Printable height (pt): `page_height_pt - 2*margin_pt`
-
-ASCII view of one page:
+## Page layout
 
 ```text
-+----------------------------------------------------+  page edge
++----------------------------------------------------+  paper edge
 |                                                    |
-|   margin                                            |
-|   +--------------------------------------------+    |
-|   |                                            |    |
-|   |                                            |    |
-|   |   (DXF geometry for this tile)             |    |
-|   |                                            |    |
-|   |  scale bar (100 mm)                        |    |
-|   +--------------------------------------------+    |
+|  col: 1/3  row: 1/1          (header)              |
+|  [100 mm scale bar]          (first page only)     |
 |                                                    |
+|   +--------------------------------------------+   |
+|   |                                            |   |
+|   |   DXF geometry for this tile               |   |
+|   |                                            |   |
+|   +--------------------------------------------+   |
+|                                                    |
+|  World origin: (0.00, 0.00) inch   (footer)        |
 +----------------------------------------------------+
 ```
 
-The printable rectangle is the area inside the margins.
-
 ### Edge-alignment marks (tape without measuring)
 
-When your pattern uses overlap (`--overlap-mm > 0`), the script also draws **dashed seam lines** that tell you exactly where the *next page’s paper edge* should land.
+When overlap > 0, dashed seam lines show exactly where the adjacent page's paper edge should land.
 
-- For tiles that have a neighbor to the **right**, a vertical dashed line is drawn at the seam position.
-- For tiles that have a neighbor **above**, a horizontal dashed line is drawn at the seam position.
+- Tiles with a **right neighbor**: vertical dashed line at the column seam.
+- Tiles with an **upper neighbor**: horizontal dashed line at the row seam.
 
 Assembly workflow:
 
-1. Put tile (0,0) down.
-2. Take tile (1,0) and place it on top of tile (0,0).
-3. Align tile (1,0)’s **left paper edge** to the vertical dashed seam line on tile (0,0).
-4. Tape.
-5. Repeat across the row, then move upward rows using the horizontal dashed seam line.
+1. Put tile `col: 1/N  row: 1/M` down.
+2. Place the next tile on top.
+3. Align its paper edge to the dashed seam line.
+4. Tape. Repeat across columns then rows.
 
-## Tiling: how many pages you get
+## Tiling
 
 ### Step size and overlap
 
-Let:
-- `printable_w_wu` / `printable_h_wu` be the printable rectangle size expressed in DXF world units
-- `overlap_wu` be the overlap expressed in DXF world units
-
-The script advances tiles by:
-
-- `step_w = printable_w_wu - overlap_wu`
-- `step_h = printable_h_wu - overlap_wu`
-
-So neighboring tiles overlap by `overlap_wu`.
-
-ASCII view of two horizontal neighbors:
-
-```text
-world X ->
-
-Tile i covers:        [---------------- printable_w_wu ----------------]
-Tile i+1 covers:                     [---------------- printable_w_wu ----------------]
-                                      ^^^^^^^^^^^^^ overlap_wu ^^^^^^^^^^^^^
-
+```
 step_w = printable_w_wu - overlap_wu
+step_h = printable_h_wu - overlap_wu
 ```
 
-If `step_w <= 0` or `step_h <= 0`, the script errors with:
+Two neighboring tiles share `overlap_wu` of geometry:
 
-> Overlap too large; no printable area remains.
+```text
+Tile i:   [-------- printable_w_wu --------]
+Tile i+1:              [-------- printable_w_wu --------]
+                        ^^^^ overlap_wu ^^^^
+           |<-- step_w -->|
+```
+
+If `step_w ≤ 0` or `step_h ≤ 0`, the tool errors: overlap is too large.
 
 ### Tile count
 
-Given drawing bounds (bbox) width/height:
-
-- `total_w = maxx - minx`
-- `total_h = maxy - miny`
-
-The tile grid dimensions are:
-
-- `nx = max(1, ceil((total_w - overlap_wu) / step_w))`
-- `ny = max(1, ceil((total_h - overlap_wu) / step_h))`
-
-Tiles are emitted row-by-row (y changes slowest):
-
-```text
-(j increases upward)
-
-(0,2) (1,2) (2,2)
-(0,1) (1,1) (2,1)
-(0,0) (1,0) (2,0)
- i->
+```
+nx = max(1, ceil((drawing_w - overlap_wu) / step_w))
+ny = max(1, ceil((drawing_h - overlap_wu) / step_h))
 ```
 
-Each PDF page is one `(i, j)` tile.
+Pages are emitted column-first within each row:
 
-### Mermaid: pipeline overview
+```
+row 2:  (col 1, row 2)  (col 2, row 2)  (col 3, row 2)
+row 1:  (col 1, row 1)  (col 2, row 1)  (col 3, row 1)
+row 0:  (col 1, row 0)  (col 2, row 0)  (col 3, row 0)
+```
+
+### Pipeline
 
 ```mermaid
 flowchart TD
-  A[Read DXF] --> B[Select layers (optional)]
-  B --> C[Compute drawing bbox in DXF world units]
+  A[Read DXF] --> B[Filter layers]
+  B --> C[Compute drawing bbox]
   C --> D[Compute printable area from page + margin]
-  D --> E[Convert printable area to world units using dxf-units]
-  E --> F[Compute tile grid using overlap]
-  F --> G[For each tile: world->page transform]
-  G --> H[Draw edge-alignment marks (scale bar only on first page)]
-  H --> I[Draw all supported entities onto page]
-  I --> J[Next page]
+  D --> E[Compute tile grid using overlap]
+  E --> F[For each tile: world-to-page transform with Y-flip]
+  F --> G[Draw seam lines and scale bar]
+  G --> H[Draw entities with linetype dash patterns]
+  H --> I[Next page]
 ```
 
 ## Examples
 
-### 1) Letter paper, no overlap (but harder to align)
-
 ```bash
-python3 dxf_tiled_pdf.py pouch-v3.dxf pattern_tiles-no-overlap.pdf \
-  --page letter \
-  --margin-mm 10 \
-  --overlap-mm 0 \
-  --dxf-units inch
+# Letter paper, default overlap
+dxf2pdf pouch.dxf
+
+# A4, 10 mm overlap, DXF in mm
+dxf2pdf input.dxf output.pdf --page a4 --dxf-units mm
+
+# Only specific layers
+dxf2pdf input.dxf --layers CUT,MARKS,NOTCHES
+
+# Omit dashed construction lines
+dxf2pdf input.dxf --no-dashed
+
+# No overlap (harder to align, fewer pages)
+dxf2pdf input.dxf --overlap-mm 0
 ```
 
-### 2) A4 paper, 10 mm overlap, only specific layers
+## Supported DXF entities
 
-```bash
-python3 dxf_tiled_pdf.py input.dxf pattern_a4.pdf \
-  --page a4 \
-  --margin-mm 10 \
-  --overlap-mm 10 \
-  --dxf-units mm \
-  --layers CUT,MARKS
-```
+| Entity | Notes |
+|---|---|
+| `LINE` | |
+| `LWPOLYLINE` | |
+| `POLYLINE` | |
+| `CIRCLE` | |
+| `ARC` | Bounding box is conservative (full circle); flattened to polyline for rendering |
+| `SPLINE` | Flattened via de Boor's algorithm |
+| `ELLIPSE` | Flattened parametrically |
+| `POINT` | Rendered as a small filled dot |
 
-### 3) Sanity-check print scaling
+`TEXT` and `MTEXT` are not rendered.
 
-- Print the **first page** at **100% / Actual Size** (do not “fit to page”).
-- Measure the scale bar on the output: it should be exactly 100 mm.
+## DXF linetypes
 
-If the scale bar does not measure 100 mm, your PDF viewer/printer settings are scaling the print.
+Entities may set `linetype` directly (e.g. `DASHED`) or inherit it from their layer (`BYLAYER`). The linetype table in the DXF defines the dash/gap pattern in world units, which is scaled and applied as a PDF dash pattern.
 
-## Supported DXF entities (current)
+Use `--no-dashed` to skip all non-continuous entities (useful for printing only cut lines, omitting reference/construction lines).
 
-The renderer currently draws:
-- `LINE`
-- `LWPOLYLINE`
-- `POLYLINE`
-- `SPLINE`
-- `ELLIPSE`
-- `POINT`
-- `CIRCLE`
-- `ARC`
+## Verifying scale
 
-Bounding boxes are computed for the same set.
+1. Print the **first page** at **100% / Actual Size** — do not scale to fit.
+2. Measure the scale bar on the printout: it should be exactly 100 mm.
 
-Notes:
-- `ARC` bounding boxes are conservative (treated like a full circle), which can slightly increase the number of tiles.
-- `SPLINE` geometry is flattened into short line segments for both drawing and bounding boxes.
-
-## DXF linetypes (dashed lines)
-
-In DXF, “dashed lines” are not a different entity type; they are a **linetype** property.
-
-- Entities may set `linetype` directly (e.g. `DASHED`).
-- Or they may set `linetype = BYLAYER`, meaning “use my layer’s linetype”.
-- The linetype name refers to a definition in the DXF linetype table (dash/gap pattern lengths in drawing units).
-
-This script renders those patterns in the PDF by default, and it can optionally filter them out using `--no-dashed` (alias: `--exclude-noncontinuous-linetypes`).
-
-## Limitations / notes
-
-- No clipping is applied per-tile: the script draws all entities on every page, relying on the world→page transform to place most geometry off-page. This is simple and robust, but for very large DXFs it can be slower.
-- DXF text (`TEXT`, `MTEXT`) is not rendered.
-- `--margin-mm` and `--overlap-mm` are physical paper distances in millimeters, independent of DXF units.
+If it doesn't measure 100 mm, your PDF viewer or printer is scaling the output.
 
 ## Troubleshooting
 
-- **Output is the wrong physical size**: most often `--dxf-units` is wrong (mm vs inch) or your printer dialog is scaling the print.
-- **Too many pages**: reduce `--margin-mm`, reduce `--overlap-mm`, or verify the DXF content doesn’t contain a far-away stray entity.
-- **No geometry found**: the DXF may only contain unsupported entity types; export polylines/lines, or extend the script to support additional entities.
+| Symptom | Likely cause |
+|---|---|
+| Wrong physical size | `--dxf-units` is wrong, or printer is scaling |
+| Too many pages | Stray entity far from the drawing; reduce overlap or margin |
+| No geometry found | DXF contains only unsupported entity types |
+| Scale bar missing | You're not on the first page |
+
+## Building from source
+
+Requires Go (tested with 1.24+). From inside the devcontainer:
+
+```bash
+# Run tests
+go test ./...
+
+# Build for macOS (Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o mac/dxf2pdf .
+
+# Build for Linux (ARM64)
+GOOS=linux GOARCH=arm64 go build -o linux/dxf2pdf .
+```
